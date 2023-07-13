@@ -62,6 +62,8 @@ CREATE OR REPLACE TEMPORARY TABLE KENNAMETAL_TRANSFORMATION.job_deduped_temp AS 
         requisition_put_on_hold_date AS date_job_hold,
         requisition_taken_off_hold_date AS date_job_removed_hold,
         approved_date AS date_job_opened,
+        date_created AS date_job_created,
+        closed_date AS date_job_closed,
         CONCAT_WS(' ', recruiter_first_name, recruiter_last_name) AS recruiter_name
     FROM KENNAMETAL_STAGING.jobs_typed
     QUALIFY ROW_NUMBER() OVER (
@@ -648,3 +650,103 @@ INSERT INTO KENNAMETAL_TRANSFORMATION.tf_fact_applications (
 ;
 
 ------------------------------------------------------------------------------------------------------
+
+-- Purpose: Creating fact_job_requisition_transactions table and inserting data from deduplicated jobs temp table
+
+DROP TABLE IF EXISTS KENNAMETAL_TRANSFORMATION.tf_fact_job_requisition_transactions
+;
+
+CREATE TABLE IF NOT EXISTS KENNAMETAL_TRANSFORMATION.tf_fact_job_requisition_transactions (
+    job_requisition_transaction_key BINARY,
+    customer_key BINARY,
+    job_req_key BINARY,
+    job_req_id VARCHAR(250),
+    recruiter_key BINARY,
+    recruiter_id VARCHAR(250),
+    date_key NUMBER,
+    date_actual DATE,
+    event_key BINARY,
+    event_name VARCHAR(250),
+    event_datetime TIMESTAMP
+)
+;
+
+INSERT INTO KENNAMETAL_TRANSFORMATION.tf_fact_job_requisition_transactions (
+
+     -- To convert date job hold to TIMESTAMP
+
+    WITH date_job AS (
+        SELECT
+            job_req_id,
+            recruiter_name,
+            date_job_created,
+            date_job_opened::DATE AS date_job_opened,
+            date_job_hold,
+            date_job_closed
+    
+        FROM
+            KENNAMETAL_TRANSFORMATION.job_deduped_temp
+    ),
+
+    -- Unpivot job events from deduped job req
+
+     job_events AS (
+        SELECT
+            jt.job_req_id,
+            jt.recruiter_name,
+            CASE
+                WHEN event_name_uncleaned = 'DATE_JOB_CREATED' THEN 'Job Created'
+                WHEN event_name_uncleaned = 'DATE_JOB_OPENED' THEN 'Job Opened'
+                WHEN event_name_uncleaned = 'DATE_JOB_HOLD' THEN 'Job On Hold'
+                WHEN event_name_uncleaned = 'DATE_JOB_CLOSED' THEN 'Job Closed'
+                WHEN event_name_uncleaned = 'NULL' THEN 'Job Cancelled'
+            END AS event_name,
+            event_datetime
+        FROM
+            date_job jt
+        UNPIVOT (event_datetime FOR event_name_uncleaned IN (
+            date_job_created,
+            date_job_opened,
+            date_job_hold,
+            date_job_closed
+            )
+        )
+        WHERE event_name IS NOT NULL
+    ),
+
+    -- Add other calculated columns
+
+    job_events_cleaned AS (
+        SELECT
+            MD5(CONCAT_WS('|', job_req_id, $global_nickname)) AS job_req_key,
+            job_req_id,
+            (RIGHT('0000' || DATE_PART('year', event_datetime), 4) || RIGHT('00' || DATE_PART('month', event_datetime), 2) || RIGHT('00' || DATE_PART('day', event_datetime), 2))::INTEGER AS date_key,
+            event_datetime::DATE AS date_actual,
+            MD5(CONCAT_WS('|', event_name, $global_nickname)) AS event_key,
+            event_name,
+            event_datetime,
+            MD5(CONCAT_WS('|', recruiter_name, $global_nickname)) AS recruiter_key,
+            MD5(recruiter_name) AS recruiter_id
+        FROM
+            job_events
+    )
+
+    SELECT
+        MD5(CONCAT_WS('|', jec.job_req_id, jec.event_key)) AS job_requisition_transaction_key,
+        dc.customer_key,
+        jec.job_req_key,
+        jec.job_req_id,
+        jec.recruiter_key,
+        jec.recruiter_id,
+        jec.date_key,
+        jec.date_actual,
+        jec.event_key,
+        jec.event_name,
+        jec.event_datetime
+    FROM
+        job_events_cleaned jec
+    LEFT JOIN UNIFIED_MART.dim_customer dc ON $global_nickname = dc.global_nickname
+)
+;
+
+--------------------------------------------------------------------------------------------
