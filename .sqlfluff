@@ -1,0 +1,107 @@
+[sqlfluff]
+
+# Or run 'sqlfluff dialects'
+dialect = snowflake
+
+# to lint or fix the large file
+large_file_skip_byte_limit = 0
+
+# L027 : References should be qualified if select has more than one referenced table/view
+# L031 : Avoid table aliases in from clauses and join conditions
+# L034 : Select wildcards then simple targets before calculations and aggregates
+# L041 : SELECT modifiers (e.g. DISTINCT) must be on the same line as SELECT
+
+exclude_rules = L027, L031, L034, L041, L052
+
+# L001 : Unnecessary trailing whitespace
+# L003 : Indentation not consistent with previous lines
+# L005 : Commas should not have whitespace directly before them
+# L006 : Operators should be surrounded by a single whitespace
+# L008 : Commas should be followed by a single whitespace unless followed by a comment
+# L009 : Files must end with a single trailing newline
+# L010 : Inconsistent capitalisation of keywords
+# L011 : Implicit/explicit aliasing of columns
+# L014 : Inconsistent capitalisation of unquoted identifiers
+# L016 : Line is too long
+# L017 : Function name not immediately followed by parenthesis
+# L018 : WITH clause closing bracket should be on a new line
+# L019 : Leading/Trailing comma enforcement
+# L020 : Table aliases should be unique within each clause
+# L022 : Blank line expected but not found after CTE closing bracket
+# L030 : Inconsistent capitalisation of function names
+# L035 : Do not specify else null in a case when statement (redundant)
+# L039 : Unnecessary whitespace found
+# L040 : Inconsistent capitalisation of boolean/null literal
+# L052 : Statements must end with a semi-colon
+
+rules = L001, L003, L005, L006, L008, L009, L010, L011, L012, L014, L016, L017, L018, L019, L020, L022, L030, L035, L039, L040
+
+# Unnecessary trailing whitespace
+[sqlfluff:rules:L001]
+
+# Indentation not consistent with previous lines
+[sqlfluff:rules:L003]
+
+# Commas should not have whitespace directly before them
+[sqlfluff:rules:L005]
+
+# Operators should be surrounded by a single whitespace
+[sqlfluff:rules:L006]
+
+# Commas should be followed by a single whitespace unless followed by a comment
+[sqlfluff:rules:L008]
+
+# Files must end with a single trailing newline
+[sqlfluff:rules:L009]
+
+# Inconsistent capitalisation of keyword
+[sqlfluff:rules:L010]
+capitalisation_policy = upper
+
+# Implicit/explicit aliasing of table
+[sqlfluff:rules:L011]
+aliasing = implicit
+
+# Implicit/explicit aliasing of columns
+[sqlfluff:rules:L012]
+aliasing = explicit
+
+# Inconsistent capitalisation of unquoted identifiers
+[sqlfluff:rules:L014]
+extended_capitalisation_policy = lower
+unquoted_identifiers_policy = aliases
+
+# Line is too long
+[sqlfluff:rules:L016]
+ignore_comment_clauses = True
+ignore_comment_lines = True
+max_line_length = 250
+
+# Function name not immediately followed by parenthesis
+[sqlfluff:rules:L017]
+
+# WITH clause closing bracket should be on a new line
+[sqlfluff:rules:L018]
+
+# Leading/Trailing comma enforcement
+[sqlfluff:rules:L019]
+
+# Table aliases should be unique within each clause
+[sqlfluff:rules:L020]
+
+# Blank line expected but not found after CTE closing bracket
+[sqlfluff:rules:L022]
+
+# Inconsistent capitalisation of function names
+[sqlfluff:rules:L030]
+capitalisation_policy = lower
+
+# Do not specify else null in a case when statement (redundant)
+[sqlfluff:rules:L035]
+
+# Unnecessary whitespace found
+[sqlfluff:rules:L039]
+
+# Inconsistent capitalisation of boolean/null literal
+[sqlfluff:rules:L040]
+capitalisation_policy = upper
