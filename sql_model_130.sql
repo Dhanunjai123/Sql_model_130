@@ -133,7 +133,7 @@ SELECT
             WHEN disability_status = 'Yes' THEN 'Disabled'
             WHEN disability_status = 'No' THEN 'Not Disabled'
         END
-    )  AS applicant_disability_status
+    ) AS applicant_disability_status
 FROM
     KENNAMETAL_STAGING.applicants_typed apt
 LEFT JOIN UNIFIED_MART.dim_customer dc ON $global_nickname = dc.global_nickname
@@ -293,7 +293,7 @@ SELECT
     jdt.job_req_id AS job_req_id,
     NULL AS crm_job_req_id,
     dc.customer_key AS customer_key,
-    jdt.job_req_status AS job_req_status,---------------  pending
+    jdt.job_req_status AS job_req_status, ---------------  pending
     jdt.job_req_status_manual_update AS job_req_status_raw,
     jdt.number_of_openings AS total_number_of_openings_requested,
     NULL AS total_number_of_openings_available,
@@ -301,20 +301,20 @@ SELECT
     jdt.eeo_category AS job_profile_name,
     jdt.job_title AS job_posting_title,
     jdt.city AS job_city_name,
-    CASE 
-        WHEN jdt.state_province_other LIKE 'US%' OR jdt.state_province_other LIKE 'CA%' 
-    THEN st.job_state_name  
+    CASE
+        WHEN jdt.state_province_other LIKE 'US%' OR jdt.state_province_other LIKE 'CA%'
+    THEN st.job_state_name
     END AS job_state_province_name,
     c.job_country AS job_country_name,
     jdt.location AS job_location_site_name,
     CASE
-        WHEN jdt.requisition_type IN ('Evergreen','Child of Evergreen') THEN 'Sourcing/Pipeline'
+        WHEN jdt.requisition_type IN ('Evergreen', 'Child of Evergreen') THEN 'Sourcing/Pipeline'
         ELSE jdt.requisition_type
     END AS job_position_type,
     jdt.job_posting_type AS job_employment_type,
     jdt.job_shift AS job_experience_level,
     NULL AS job_compensation_type,
-    CASE 
+    CASE
         WHEN jdt.flsa_status_us_only = 'No FLSA Required' THEN 'Non-Exempt'
         ELSE jdt.flsa_status_us_only
     END AS job_overtime_compensation_type,
@@ -372,7 +372,7 @@ SELECT
     NULL AS hiring_manager_email,
     NULL AS job_family_id,
     jdt.owner AS job_family_name,
-    COALESCE(jdt.job_function_type,jdt.job_function_type_1) AS job_family_group_name,
+    COALESCE(jdt.job_function_type, jdt.job_function_type_1) AS job_family_group_name,
     jdt.confidential AS job_grade_name,
     NULL AS organizational_division_id,
     jdt.division AS organizational_division_name,
@@ -696,14 +696,13 @@ INSERT INTO KENNAMETAL_TRANSFORMATION.tf_fact_job_requisition_transactions (
             date_job_opened::DATE AS date_job_opened,
             date_job_hold,
             date_job_closed
-    
         FROM
             KENNAMETAL_TRANSFORMATION.job_deduped_temp
     ),
 
     -- Unpivot job events from deduped job req
 
-     job_events AS (
+    job_events AS (
         SELECT
             jt.job_req_id,
             jt.recruiter_name,
