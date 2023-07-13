@@ -904,7 +904,7 @@ INSERT INTO KENNAMETAL_TRANSFORMATION.tf_fact_job_opening (
             ast.application_date AS fill_date
         FROM
             KENNAMETAL_STAGING.applicants_typed ast
-        INNER JOIN KENNAMETAL_TRANSFORMATION.application_deduped_temp adt ON ast.application_id = adt.application_id
+        INNER JOIN KENNAMETAL_TRANSFORMATION.application_deduped_temp adt ON ast.application_id = adt.application_id and ast.application_date = adt.application_date
         WHERE adt.application_status_name IN ('Verbal Offer Extended', 'Offer Accepted', 'Written Offer Extended', 'Written Offer Accepted')
     )
 
