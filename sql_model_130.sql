@@ -302,8 +302,7 @@ SELECT
     jdt.job_title AS job_posting_title,
     jdt.city AS job_city_name,
     CASE
-        WHEN jdt.state_province_other LIKE 'US%' OR jdt.state_province_other LIKE 'CA%'
-    THEN st.job_state_name
+        WHEN jdt.state_province_other LIKE 'US%' OR jdt.state_province_other LIKE 'CA%' THEN st.job_state_name
     END AS job_state_province_name,
     c.job_country AS job_country_name,
     jdt.location AS job_location_site_name,
