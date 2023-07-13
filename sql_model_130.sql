@@ -64,7 +64,20 @@ CREATE OR REPLACE TEMPORARY TABLE KENNAMETAL_TRANSFORMATION.job_deduped_temp AS 
         approved_date AS date_job_opened,
         date_created AS date_job_created,
         closed_date AS date_job_closed,
-        CONCAT_WS(' ', recruiter_first_name, recruiter_last_name) AS recruiter_name
+        CONCAT_WS(' ', recruiter_first_name, recruiter_last_name) AS recruiter_name,
+        CASE
+            WHEN requisition_type IN ('Evergreen', 'Child of Evergreen') THEN 'Yes'
+            ELSE 'No'
+        END AS is_job_opening_evergreen,
+        CASE
+            WHEN headcount_type LIKE '%Addition%' THEN 'Addition to Headcount'
+            WHEN headcount_type LIKE '%Replacement%' OR 'Headcount Type' LIKE '%Redeployment%' THEN 'Replacement'
+            ELSE headcount_type
+        END AS job_opening_justification,
+        CASE
+            WHEN requisition_type = 'Evergreen' OR requisition_type = 'Child of Evergreen' THEN 'Evergreen'
+            ELSE 'Parent'
+        END AS Job_Opening_Type
     FROM KENNAMETAL_STAGING.jobs_typed
     QUALIFY ROW_NUMBER() OVER (
         PARTITION BY job_req_id
@@ -673,7 +686,7 @@ CREATE TABLE IF NOT EXISTS KENNAMETAL_TRANSFORMATION.tf_fact_job_requisition_tra
 
 INSERT INTO KENNAMETAL_TRANSFORMATION.tf_fact_job_requisition_transactions (
 
-     -- To convert date job hold to TIMESTAMP
+     -- To convert date job opened to DATE
 
     WITH date_job AS (
         SELECT
@@ -750,3 +763,176 @@ INSERT INTO KENNAMETAL_TRANSFORMATION.tf_fact_job_requisition_transactions (
 ;
 
 --------------------------------------------------------------------------------------------
+
+
+-- Purpose: Creating fact_recruitment_transactions table.
+
+DROP TABLE IF EXISTS KENNAMETAL_TRANSFORMATION.tf_fact_recruitment_transactions
+;
+
+CREATE TABLE IF NOT EXISTS KENNAMETAL_TRANSFORMATION.tf_fact_recruitment_transactions (
+    recruitment_transaction_key BINARY,
+    customer_key BINARY,
+    application_key BINARY,
+    application_id VARCHAR(250),
+    applicant_key BINARY,
+    applicant_id VARCHAR(250),
+    job_req_key BINARY,
+    job_req_id VARCHAR(250),
+    recruiter_key BINARY,
+    recruiter_id VARCHAR(250),
+    recruiter_name VARCHAR(250),
+    date_key NUMBER,
+    date_actual DATE,
+    application_status_key BINARY,
+    application_step VARCHAR(250),
+    application_status VARCHAR(250),
+    date_application_status DATE,
+    event_datetime TIMESTAMP
+)
+;
+
+INSERT INTO KENNAMETAL_TRANSFORMATION.tf_fact_recruitment_transactions (
+    SELECT
+        MD5(CONCAT_WS('|', apt.application_id, $global_nickname, adt.application_step_name, adt.ats_application_status, apt.application_date)) AS recruitment_transaction_key,
+        MAX(dc.customer_key) AS customer_key,
+        MD5(CONCAT_WS('|', apt.application_id, $global_nickname)) AS application_key,
+        apt.application_id AS application_id,
+        MAX(MD5(CONCAT_WS('|', apt.candidate_id, $global_nickname))) AS applicant_key,
+        MAX(apt.candidate_id) AS applicant_id,
+        MAX(MD5(CONCAT_WS('|', apt.job_req_id, $global_nickname))) AS job_req_key,
+        MAX(apt.job_req_id) AS job_req_id,
+        MD5(CONCAT_WS('|', MAX(jdt.recruiter_name), $global_nickname)) AS recruiter_key,
+        MAX(MD5(jdt.recruiter_name)) AS recruiter_id,
+        MAX(jdt.recruiter_name) AS recruiter_name,
+        (
+            RIGHT(
+                '0000' || DATE_PART('year', apt.application_date::DATE), 4
+            ) || RIGHT(
+                '00' || DATE_PART('month', apt.application_date::DATE), 2
+            ) || RIGHT(
+                '00' || DATE_PART('day', apt.application_date::DATE), 2
+            )
+        )::INTEGER AS date_key,
+        apt.application_date::DATE AS date_actual,
+        MD5(CONCAT_WS('|', adt.application_step_name, adt.ats_application_status, $global_nickname)) AS application_status_key,
+        adt.application_step_name AS application_step,
+        adt.ats_application_status AS application_status,
+        apt.application_date::DATE AS date_application_status,
+        apt.application_date AS event_datetime
+    FROM
+        KENNAMETAL_STAGING.applicants_typed apt
+    INNER JOIN KENNAMETAL_TRANSFORMATION.application_deduped_temp adt ON apt.application_id = adt.application_id AND apt.application_date = adt.application_date
+    LEFT JOIN KENNAMETAL_TRANSFORMATION.job_deduped_temp jdt ON apt.job_req_id = jdt.job_req_id
+    LEFT JOIN UNIFIED_MART.dim_customer dc ON $global_nickname = dc.global_nickname
+    GROUP BY apt.application_id,
+             adt.application_step_name,
+             adt.ats_application_status,
+             apt.application_date
+)
+;
+
+--------------------------------------------------------------------------------------------
+
+-- Purpose: Creating fact_job_opening table
+
+DROP TABLE IF EXISTS KENNAMETAL_TRANSFORMATION.tf_fact_job_opening
+;
+
+CREATE TABLE KENNAMETAL_TRANSFORMATION.tf_fact_job_opening (
+    job_inventory_key BINARY,
+    customer_key BINARY,
+    job_req_key BINARY,
+    job_req_id VARCHAR(250),
+    job_id_opening_replaced VARCHAR(250),
+    job_opening_id VARCHAR(250),
+    job_position_id VARCHAR(250),
+    recruiter_key BINARY,
+    recruiter_id VARCHAR(250),
+    recruiter_name VARCHAR(250),
+    application_key BINARY,
+    application_id VARCHAR(250),
+    applicant_key BINARY,
+    applicant_id VARCHAR(250),
+    is_job_opening_evergreen BOOLEAN,
+    job_opening_justification VARCHAR(250),
+    job_opening_posting_type VARCHAR(250),
+    job_opening_replacement_for_employee_name VARCHAR(250),
+    job_opening_type VARCHAR(250),
+    job_opening_status VARCHAR(250),
+    snapshot DATE
+)
+;
+
+INSERT INTO KENNAMETAL_TRANSFORMATION.tf_fact_job_opening (
+
+    --Generating seat number according to the number of openings available in jobs
+
+    WITH seat_numbers AS (
+        SELECT
+            ROW_NUMBER() OVER (ORDER BY SEQ4()) AS seat_number
+        FROM
+            TABLE(GENERATOR(ROWCOUNT => 1000))
+    ),
+
+    --job openings specifies how many jobs are available for a particular job position.
+
+    job_openings AS (
+        SELECT
+            *,
+            j.job_req_id || '|Seat-' || sn.seat_number AS job_opening_id,
+            MD5(CONCAT_WS('|', j.job_req_id, $global_nickname)) AS job_req_key,
+            j.job_req_status AS job_opening_status,
+            NULL AS job_position_id,
+            MD5(j.recruiter_name) AS recruiter_id,
+            MD5(CONCAT_WS('|', j.recruiter_name, $global_nickname)) AS recruiter_key
+        FROM
+            KENNAMETAL_TRANSFORMATION.job_deduped_temp j
+        INNER JOIN seat_numbers sn ON sn.seat_number <= IFF(j.number_of_openings > 0, j.number_of_openings, 1)
+
+    ),
+
+    -- Specifies the applicants who have received a verbal offer and/or accepted the offer for a specific job position
+
+    accepted_applications AS (
+        SELECT
+            ast.job_req_id || '|Seat-' || ROW_NUMBER() OVER (PARTITION BY ast.job_req_id ORDER BY ast.application_date DESC NULLS LAST) AS accepted_opening_id,
+            MD5(CONCAT_WS('|', ast.application_id, $global_nickname)) AS application_key,
+            MD5(CONCAT_WS('|', ast.application_id)) AS application_id,
+            MD5(CONCAT_WS('|', ast.candidate_id, $global_nickname)) AS applicant_key,
+            MD5(ast.candidate_id) AS applicant_id,
+            ast.application_date AS fill_date
+        FROM
+            KENNAMETAL_STAGING.applicants_typed ast
+        INNER JOIN KENNAMETAL_TRANSFORMATION.application_deduped_temp adt ON ast.application_id = adt.application_id
+        WHERE adt.application_status_name IN ('Verbal Offer Extended', 'Offer Accepted', 'Written Offer Extended', 'Written Offer Accepted')
+    )
+
+    SELECT
+        MD5(CONCAT_WS('|', jo.job_opening_id, $global_nickname)) AS job_inventory_key,
+        dc.customer_key,
+        jo.job_req_key,
+        jo.job_req_id,
+        NULL AS job_id_opening_replaced,
+        jo.job_opening_id,
+        NULL AS job_position_id,
+        jo.recruiter_key,
+        jo.recruiter_id,
+        jo.recruiter_name,
+        aa.application_key,
+        aa.application_id,
+        aa.applicant_key,
+        aa.applicant_id,
+        jo.is_job_opening_evergreen,
+        jo.job_opening_justification,
+        NULL AS job_opening_posting_type,
+        jo.replacement_or_redeployment_for_please_add_employee_name AS job_opening_replacement_for_employee_name,
+        jo.job_opening_type,
+        jo.job_opening_status, ----- Need Input 
+        CURRENT_TIMESTAMP() AS snapshot
+    FROM
+        job_openings jo
+    LEFT JOIN accepted_applications aa ON jo.job_opening_id = aa.accepted_opening_id
+    LEFT JOIN UNIFIED_MART.dim_customer dc ON $global_nickname = dc.global_nickname
+)
+;
