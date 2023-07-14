@@ -56,6 +56,30 @@ CREATE OR REPLACE TEMPORARY TABLE KENNAMETAL_TRANSFORMATION.application_deduped_
 
 CREATE OR REPLACE TEMPORARY TABLE KENNAMETAL_TRANSFORMATION.job_deduped_temp AS (
 
+   --------------  Need to deltete jobs which are in applicants but not in jobs  -
+
+    WITH application_status_ranks AS (
+        SELECT
+            ats_application_status,
+            application_status_rank,
+        FROM
+            KENNAMETAL_STAGING.APPLICATION_STATUS_ALIGNMENT_TYPED
+        WHERE
+            application_status_rank >= (SELECT application_status_rank FROM KENNAMETAL_STAGING.APPLICATION_STATUS_ALIGNMENT_TYPED WHERE ats_application_status = 'Offer Accepted')
+            AND application_disposition_type IS NULL
+    ),
+
+    offer_accepts AS (
+        SELECT
+            job_req_id,
+            COUNT(*) AS total_offer_accepts
+        FROM
+            KENNAMETAL_TRANSFORMATION.application_deduped_temp adt
+        LEFT JOIN KENNAMETAL_STAGING.application_status_alignment_typed asa ON adt.application_status = asa.ats_application_status
+        WHERE asa.application_status_rank IN (SELECT application_status_rank FROM application_status_ranks)
+        GROUP BY job_req_id
+    )
+
     SELECT
         *,
         job_req_status_manual_update AS job_req_status,---------------  pending
