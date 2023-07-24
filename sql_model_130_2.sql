@@ -19,13 +19,19 @@ SET global_nickname = 'Kennametal'
 
 CREATE OR REPLACE TEMPORARY TABLE KENNAMETAL_TRANSFORMATION.application_deduped_temp AS (
 
-    --To remove jobs in applicants table which are not present in jobs table
+     --To remove jobs in applicants table which are not present in jobs table
 
     WITH filtered_applications_by_jobs AS (
-        SELECT * FROM KENNAMETAL_STAGING.applicants_typed WHERE job_req_id NOT IN 
-        (SELECT DISTINCT job_req_id FROM KENNAMETAL_STAGING.applicants_typed
-        EXCEPT
-        SELECT DISTINCT job_req_id FROM KENNAMETAL_STAGING.jobs_typed)
+         SELECT * FROM KENNAMETAL_STAGING.applicants_typed WHERE job_req_id IN 
+        (SELECT job_req_id FROM KENNAMETAL_STAGING.jobs_typed)
+    ),
+
+    --To remove applications which have anonymized as name,email,mobile 
+
+   filtered_applications_by_anonymized AS (
+        SELECT * FROM filtered_applications_by_jobs WHERE application_id NOT IN 
+        (SELECT application_id FROM kennametal_staging.applicants_typed 
+        WHERE first_name LIKE '%Anonymized%' AND last_name LIKE '%Anonymized%' AND mobile_phone LIKE '%Anonymized%' AND email_address LIKE '%Anonymized%')
     ),
 
     --To remove duplicate applications
@@ -46,7 +52,7 @@ CREATE OR REPLACE TEMPORARY TABLE KENNAMETAL_TRANSFORMATION.application_deduped_
                 ELSE 'No'
             END AS is_application_dispositioned
         FROM
-            filtered_applications_by_jobs apt
+            filtered_applications_by_anonymized apt
         LEFT JOIN KENNAMETAL_STAGING.application_status_alignment_typed asat ON apt.application_current_status = asat.ats_application_status
         WHERE apt.application_date IS NOT NULL
         QUALIFY ROW_NUMBER() OVER(
@@ -71,6 +77,8 @@ CREATE OR REPLACE TEMPORARY TABLE KENNAMETAL_TRANSFORMATION.application_deduped_
 -- Purpose: Creating jobs temp table to avoid duplicate jobs
 
 CREATE OR REPLACE TEMPORARY TABLE KENNAMETAL_TRANSFORMATION.job_deduped_temp AS (
+
+    --- FOR JOB REQ STATUS LOGIC
     
     WITH offer_accepts AS (
         SELECT
