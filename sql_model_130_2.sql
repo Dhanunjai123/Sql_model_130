@@ -71,7 +71,7 @@ CREATE OR REPLACE TEMPORARY TABLE KENNAMETAL_TRANSFORMATION.application_deduped_
         ORDER BY da.application_status_ranker DESC NULLS LAST
     ) = 1
 )
-
+;
 --------------------------------------------------------------------------------------------
 
 -- Purpose: Creating jobs temp table to avoid duplicate jobs
@@ -100,7 +100,6 @@ CREATE OR REPLACE TEMPORARY TABLE KENNAMETAL_TRANSFORMATION.job_deduped_temp AS 
                 ) THEN 'Closed'
             ELSE job_req_status_manual_update
         END AS job_req_status,
-        job_req_status AS job_opening_status,
         requisition_put_on_hold_date AS date_job_hold,
         requisition_taken_off_hold_date AS date_job_removed_hold,
         approved_date AS date_job_opened,
@@ -668,11 +667,7 @@ INSERT INTO KENNAMETAL_TRANSFORMATION.tf_fact_applications (
                 WHEN apt.application_status = 'Under HM Review' THEN apt.created_date
             END
         ) AS date_submit_to_hm,
-        MAX(
-            CASE
-                WHEN apt.application_status = 'Offer Accepted' THEN apt.created_date
-            END
-        ) AS date_verbal_offer_accept,
+        MAX(date_verbal_offer_accept) AS date_verbal_offer_accept,
         MAX(
             CASE
                 WHEN apt.application_status = 'Verbal Offer Extended' THEN apt.created_date
@@ -690,7 +685,7 @@ INSERT INTO KENNAMETAL_TRANSFORMATION.tf_fact_applications (
         ) AS date_written_offer_extend,
         DATEDIFF(DAY, MAX(jdt.date_job_opened), date_hire) AS elapsed_days_to_hire,
         DATEDIFF(DAY, MAX(jdt.date_job_opened), date_hm_interview) AS elapsed_days_to_hm_interview,
-        DATEDIFF(DAY, MAX(jdt.date_job_opened), date_verbal_offer_accept) AS elapsed_days_to_offer_accept,
+        DATEDIFF(DAY, MAX(jdt.date_job_opened), MAX(date_verbal_offer_accept)) AS elapsed_days_to_offer_accept,
         NULL AS elapsed_days_to_start
     FROM
         KENNAMETAL_STAGING.applicants_typed apt
