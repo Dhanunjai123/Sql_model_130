@@ -26,18 +26,25 @@ CREATE OR REPLACE TEMPORARY TABLE KENNAMETAL_TRANSFORMATION.application_deduped_
         (SELECT DISTINCT job_req_id FROM KENNAMETAL_STAGING.applicants_typed
         EXCEPT
         SELECT DISTINCT job_req_id FROM KENNAMETAL_STAGING.jobs_typed)
-    )
+    ),
 
     --To remove duplicate applications
 
-    WITH deduped_appplications AS (
+    deduped_appplications AS (
         SELECT
             apt.*,
             asat.application_status_name,
             asat.application_step_name,
             asat.ats_application_status,
             asat.application_disposition_type,
-            IFF(asat.application_disposition_type IS NOT NULL, NULL, application_status_rank) AS application_status_ranker
+            IFF(asat.application_disposition_type IS NOT NULL, NULL, application_status_rank) AS application_status_ranker,
+            CASE
+                WHEN apt.application_status = 'Offer Accepted' THEN apt.created_date
+            END AS date_verbal_offer_accept,
+            CASE
+                WHEN asat.application_step_name IN ('Rejected', 'Withdrawn', 'Rescinded') THEN 'Yes'
+                ELSE 'No'
+            END AS is_application_dispositioned
         FROM
             filtered_applications_by_jobs apt
         LEFT JOIN KENNAMETAL_STAGING.application_status_alignment_typed asat ON apt.application_current_status = asat.ats_application_status
@@ -64,34 +71,28 @@ CREATE OR REPLACE TEMPORARY TABLE KENNAMETAL_TRANSFORMATION.application_deduped_
 -- Purpose: Creating jobs temp table to avoid duplicate jobs
 
 CREATE OR REPLACE TEMPORARY TABLE KENNAMETAL_TRANSFORMATION.job_deduped_temp AS (
-
-   -------  job_req_status logic
-
-    WITH application_status_ranks AS (
+    
+    WITH offer_accepts AS (
         SELECT
-            ats_application_status,
-            application_status_rank,
+            job_req_id
         FROM
-            KENNAMETAL_STAGING.APPLICATION_STATUS_ALIGNMENT_TYPED
-        WHERE
-            application_status_rank >= (SELECT application_status_rank FROM KENNAMETAL_STAGING.APPLICATION_STATUS_ALIGNMENT_TYPED WHERE ats_application_status = 'Offer Accepted')
-            AND application_disposition_type IS NULL
-    ),
-
-    offer_accepts AS (
-        SELECT
-            job_req_id,
-            COUNT(*) AS total_offer_accepts
-        FROM
-            KENNAMETAL_TRANSFORMATION.application_deduped_temp adt
-        LEFT JOIN KENNAMETAL_STAGING.application_status_alignment_typed asa ON adt.application_status = asa.ats_application_status
-        WHERE asa.application_status_rank IN (SELECT application_status_rank FROM application_status_ranks) AND asa.application_disposition_type IS NULL
+            KENNAMETAL_TRANSFORMATION.application_deduped_temp
+        WHERE date_verbal_offer_accept IS NOT NULL AND is_application_dispositioned = 'No'
         GROUP BY job_req_id
     )
 
     SELECT
         *,
-        job_req_status_manual_update AS job_req_status,---------------  pending
+        CASE 
+            WHEN job_req_status_manual_update = 'Pending Approval' THEN 'Pending'
+            WHEN job_req_status_manual_update IN ('Approved', 'Open') THEN 'Open'
+            WHEN job_req_status_manual_update = 'On Hold' THEN 'Hold'
+            WHEN job_req_id in (
+                  SELECT job_req_id FROM offer_accepts
+                ) THEN 'Closed'
+            ELSE job_req_status_manual_update
+        END AS job_req_status,
+        job_req_status AS job_opening_status,
         requisition_put_on_hold_date AS date_job_hold,
         requisition_taken_off_hold_date AS date_job_removed_hold,
         approved_date AS date_job_opened,
