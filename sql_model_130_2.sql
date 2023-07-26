@@ -22,16 +22,16 @@ CREATE OR REPLACE TEMPORARY TABLE KENNAMETAL_TRANSFORMATION.application_deduped_
      --To remove jobs in applicants table which are not present in jobs table
 
     WITH filtered_applications_by_jobs AS (
-         SELECT * FROM KENNAMETAL_STAGING.applicants_typed WHERE job_req_id IN 
-        (SELECT job_req_id FROM KENNAMETAL_STAGING.jobs_typed)
+        SELECT * FROM KENNAMETAL_STAGING.applicants_typed WHERE job_req_id IN
+            (SELECT job_req_id FROM KENNAMETAL_STAGING.jobs_typed)
     ),
 
     --To remove applications which have anonymized as name,email,mobile 
 
-   filtered_applications_by_anonymized AS (
-        SELECT * FROM filtered_applications_by_jobs WHERE application_id NOT IN 
-        (SELECT application_id FROM kennametal_staging.applicants_typed 
-        WHERE first_name LIKE '%Anonymized%' AND last_name LIKE '%Anonymized%' AND mobile_phone LIKE '%Anonymized%' AND email_address LIKE '%Anonymized%')
+    filtered_applications_by_anonymized AS (
+        SELECT * FROM filtered_applications_by_jobs WHERE application_id NOT IN
+            (SELECT application_id FROM kennametal_staging.applicants_typed
+                WHERE first_name LIKE '%Anonymized%' AND last_name LIKE '%Anonymized%' AND mobile_phone LIKE '%Anonymized%' AND email_address LIKE '%Anonymized%')
     ),
 
     --To remove duplicate applications
@@ -78,8 +78,8 @@ CREATE OR REPLACE TEMPORARY TABLE KENNAMETAL_TRANSFORMATION.application_deduped_
 
 CREATE OR REPLACE TEMPORARY TABLE KENNAMETAL_TRANSFORMATION.job_deduped_temp AS (
 
-    --- FOR JOB REQ STATUS LOGIC
-    
+    --FOR JOB REQ STATUS LOGIC
+
     WITH offer_accepts AS (
         SELECT
             job_req_id
@@ -91,12 +91,12 @@ CREATE OR REPLACE TEMPORARY TABLE KENNAMETAL_TRANSFORMATION.job_deduped_temp AS 
 
     SELECT
         *,
-        CASE 
+        CASE
             WHEN job_req_status_manual_update = 'Pending Approval' THEN 'Pending'
             WHEN job_req_status_manual_update IN ('Approved', 'Open') THEN 'Open'
             WHEN job_req_status_manual_update = 'On Hold' THEN 'Hold'
-            WHEN job_req_id in (
-                  SELECT job_req_id FROM offer_accepts
+            WHEN job_req_id IN (
+                SELECT job_req_id FROM offer_accepts
                 ) THEN 'Closed'
             ELSE job_req_status_manual_update
         END AS job_req_status,
@@ -118,7 +118,7 @@ CREATE OR REPLACE TEMPORARY TABLE KENNAMETAL_TRANSFORMATION.job_deduped_temp AS 
         CASE
             WHEN requisition_type = 'Evergreen' OR requisition_type = 'Child of Evergreen' THEN 'Evergreen'
             ELSE 'Parent'
-        END AS Job_Opening_Type
+        END AS job_opening_type
     FROM KENNAMETAL_STAGING.jobs_typed
     QUALIFY ROW_NUMBER() OVER (
         PARTITION BY job_req_id
@@ -334,7 +334,7 @@ SELECT
     jdt.job_req_id AS job_req_id,
     NULL AS crm_job_req_id,
     dc.customer_key AS customer_key,
-    jdt.job_req_status AS job_req_status, ---------------  pending
+    jdt.job_req_status AS job_req_status,
     jdt.job_req_status_manual_update AS job_req_status_raw,
     jdt.number_of_openings AS total_number_of_openings_requested,
     NULL AS total_number_of_openings_available,
@@ -939,7 +939,7 @@ INSERT INTO KENNAMETAL_TRANSFORMATION.tf_fact_job_opening (
             ast.application_date AS fill_date
         FROM
             KENNAMETAL_STAGING.applicants_typed ast
-        INNER JOIN KENNAMETAL_TRANSFORMATION.application_deduped_temp adt ON ast.application_id = adt.application_id and ast.application_date = adt.application_date
+        INNER JOIN KENNAMETAL_TRANSFORMATION.application_deduped_temp adt ON ast.application_id = adt.application_id AND ast.application_date = adt.application_date
         WHERE adt.application_status_name IN ('Verbal Offer Extended', 'Offer Accepted', 'Written Offer Extended', 'Written Offer Accepted')
     )
 
