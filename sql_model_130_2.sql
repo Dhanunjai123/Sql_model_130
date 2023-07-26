@@ -26,7 +26,7 @@ CREATE OR REPLACE TEMPORARY TABLE KENNAMETAL_TRANSFORMATION.application_deduped_
             (SELECT job_req_id FROM KENNAMETAL_STAGING.jobs_typed)
     ),
 
-    --To remove applications which have anonymized as name,email,mobile 
+    --To remove applications which have anonymized as name,email and mobile 
 
     filtered_applications_by_anonymized AS (
         SELECT * FROM filtered_applications_by_jobs WHERE application_id NOT IN
@@ -72,6 +72,7 @@ CREATE OR REPLACE TEMPORARY TABLE KENNAMETAL_TRANSFORMATION.application_deduped_
     ) = 1
 )
 ;
+
 --------------------------------------------------------------------------------------------
 
 -- Purpose: Creating jobs temp table to avoid duplicate jobs
@@ -94,9 +95,7 @@ CREATE OR REPLACE TEMPORARY TABLE KENNAMETAL_TRANSFORMATION.job_deduped_temp AS 
             WHEN job_req_status_manual_update = 'Pending Approval' THEN 'Pending'
             WHEN job_req_status_manual_update IN ('Approved', 'Open') THEN 'Open'
             WHEN job_req_status_manual_update = 'On Hold' THEN 'Hold'
-            WHEN job_req_id IN (
-                SELECT job_req_id FROM offer_accepts
-                ) THEN 'Closed'
+            WHEN job_req_id IN (SELECT job_req_id FROM offer_accepts) THEN 'Closed'
             ELSE job_req_status_manual_update
         END AS job_req_status,
         requisition_put_on_hold_date AS date_job_hold,
@@ -198,11 +197,8 @@ CREATE TABLE IF NOT EXISTS KENNAMETAL_TRANSFORMATION.tf_dim_application_status (
 ;
 
 INSERT INTO KENNAMETAL_TRANSFORMATION.tf_dim_application_status
-
 SELECT
-    MD5(
-        CONCAT_WS('|', application_step_name, ats_application_status, $global_nickname)::VARCHAR
-    ) AS application_status_key,
+    MD5(CONCAT_WS('|', application_step_name, ats_application_status, $global_nickname)::VARCHAR) AS application_status_key,
     dc.customer_key AS customer_key,
     application_step_name AS application_step,
     ats_application_status AS application_status,
