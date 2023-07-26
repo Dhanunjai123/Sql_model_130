@@ -463,7 +463,7 @@ SELECT
     MAX(r.recruitment_team) AS recruitment_team
 FROM
     KENNAMETAL_TRANSFORMATION.job_deduped_temp jdt
-LEFT JOIN KENNAMETAL_STAGING.recruiters_typed r
+LEFT JOIN KENNAMETAL_STAGING.recruiters_typed r ON jdt.recruiter_name = r.recruiter_name
 LEFT JOIN UNIFIED_MART.dim_customer dc ON $global_nickname = dc.global_nickname
 WHERE jdt.recruiter_name IS NOT NULL
 GROUP BY jdt.recruiter_name
