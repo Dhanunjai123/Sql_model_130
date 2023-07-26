@@ -82,11 +82,10 @@ CREATE OR REPLACE TEMPORARY TABLE KENNAMETAL_TRANSFORMATION.job_deduped_temp AS 
 
     WITH offer_accepts AS (
         SELECT
-            job_req_id
+            DISTINCT job_req_id
         FROM
             KENNAMETAL_TRANSFORMATION.application_deduped_temp
         WHERE date_verbal_offer_accept IS NOT NULL AND is_application_dispositioned = 'No'
-        GROUP BY job_req_id
     )
 
     SELECT
