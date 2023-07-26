@@ -620,7 +620,7 @@ INSERT INTO KENNAMETAL_TRANSFORMATION.tf_fact_applications (
         ) AS date_application_screen,
         MAX(
             CASE
-                WHEN apt.application_status = 'Recruiter Phone Screen Completed' THEN apt.created_date
+                WHEN apt.application_status = 'Recruiter Phone Screen Scheduled' THEN apt.created_date
             END
         ) AS date_application_screen_pending,
         NULL AS date_application_screen_successful,
@@ -667,7 +667,11 @@ INSERT INTO KENNAMETAL_TRANSFORMATION.tf_fact_applications (
                 WHEN apt.application_status = 'Under HM Review' THEN apt.created_date
             END
         ) AS date_submit_to_hm,
-        MAX(date_verbal_offer_accept) AS date_verbal_offer_accept,
+        MAX(
+            CASE
+                WHEN apt.application_status = 'Offer Accepted' THEN apt.created_date
+            END
+        ) AS date_verbal_offer_accept,
         MAX(
             CASE
                 WHEN apt.application_status = 'Verbal Offer Extended' THEN apt.created_date
@@ -918,7 +922,6 @@ INSERT INTO KENNAMETAL_TRANSFORMATION.tf_fact_job_opening (
             j.job_req_id || '|Seat-' || sn.seat_number AS job_opening_id,
             MD5(CONCAT_WS('|', j.job_req_id, $global_nickname)) AS job_req_key,
             j.job_req_status AS job_opening_status,
-            NULL AS job_position_id,
             MD5(j.recruiter_name) AS recruiter_id,
             MD5(CONCAT_WS('|', j.recruiter_name, $global_nickname)) AS recruiter_key
         FROM
@@ -963,7 +966,7 @@ INSERT INTO KENNAMETAL_TRANSFORMATION.tf_fact_job_opening (
         NULL AS job_opening_posting_type,
         jo.replacement_or_redeployment_for_please_add_employee_name AS job_opening_replacement_for_employee_name,
         jo.job_opening_type,
-        jo.job_opening_status, ----- Need Input 
+        jo.job_opening_status,
         CURRENT_TIMESTAMP() AS snapshot
     FROM
         job_openings jo
