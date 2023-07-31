@@ -19,20 +19,31 @@ SET global_nickname = 'Kennametal'
 
 CREATE OR REPLACE TEMPORARY TABLE KENNAMETAL_TRANSFORMATION.application_deduped_temp AS (
 
-     --To remove jobs in applicants table which are not present in jobs table
+    --To remove jobs in applicants table which are not present in jobs table  and
+    --to remove applications which have anonymized as name,email and mobile    
 
-    WITH filtered_applications_by_jobs AS (
-        SELECT * FROM KENNAMETAL_STAGING.applicants_typed WHERE job_req_id IN
-            (SELECT job_req_id FROM KENNAMETAL_STAGING.jobs_typed)
-    ),
-
-    --To remove applications which have anonymized as name,email and mobile 
-
-    filtered_applications_by_anonymized AS (
-        SELECT * FROM filtered_applications_by_jobs WHERE application_id NOT IN
-            (SELECT application_id FROM kennametal_staging.applicants_typed
-                WHERE first_name LIKE '%Anonymized%' AND last_name LIKE '%Anonymized%' AND mobile_phone LIKE '%Anonymized%' AND email_address LIKE '%Anonymized%')
-    ),
+    WITH filtered_applications AS (
+        SELECT 
+            *
+        FROM
+            KENNAMETAL_STAGING.applicants_typed
+        WHERE job_req_id IN (
+            SELECT
+                job_req_id
+            FROM
+                KENNAMETAL_STAGING.jobs_typed
+        )
+        AND application_id NOT IN (
+            SELECT
+                application_id 
+            FROM
+                KENNAMETAL_STAGING.applicants_typed
+            WHERE first_name LIKE '%Anonymized%' 
+            AND last_name LIKE '%Anonymized%' 
+            AND mobile_phone LIKE '%Anonymized%' 
+            AND email_address LIKE '%Anonymized%'
+        )
+    )
 
     --To remove duplicate applications
 
@@ -43,14 +54,7 @@ CREATE OR REPLACE TEMPORARY TABLE KENNAMETAL_TRANSFORMATION.application_deduped_
             asat.application_step_name,
             asat.ats_application_status,
             asat.application_disposition_type,
-            IFF(asat.application_disposition_type IS NOT NULL, NULL, application_status_rank) AS application_status_ranker,
-            CASE
-                WHEN apt.application_status = 'Offer Accepted' THEN apt.created_date
-            END AS date_verbal_offer_accept,
-            CASE
-                WHEN asat.application_step_name IN ('Rejected', 'Withdrawn', 'Rescinded') THEN 'Yes'
-                ELSE 'No'
-            END AS is_application_dispositioned
+            IFF(asat.application_disposition_type IS NOT NULL, NULL, application_status_rank) AS application_status_ranker
         FROM
             filtered_applications_by_anonymized apt
         LEFT JOIN KENNAMETAL_STAGING.application_status_alignment_typed asat ON apt.application_current_status = asat.ats_application_status
@@ -83,10 +87,21 @@ CREATE OR REPLACE TEMPORARY TABLE KENNAMETAL_TRANSFORMATION.job_deduped_temp AS 
 
     WITH offer_accepts AS (
         SELECT
-            DISTINCT job_req_id
+            job_req_id,
+            MAX(
+                CASE
+                    WHEN apt.application_status = 'Offer Accepted' THEN apt.created_date
+                END 
+            ) AS date_verbal_offer_accept,
+            MAX(
+                CASE
+                    WHEN asat.application_step_name IN ('Rejected', 'Withdrawn', 'Rescinded') THEN 'Yes'
+                    ELSE 'No'
+                END
+            ) AS is_application_dispositioned
         FROM
-            KENNAMETAL_TRANSFORMATION.application_deduped_temp
-        WHERE date_verbal_offer_accept IS NOT NULL AND is_application_dispositioned = 'No'
+            KENNAMETAL_STAGING.applicants_typed
+        GROUP BY job_req_id
     )
 
     SELECT
